@@ -1,0 +1,5 @@
+chronos:
+  # 管理端口
+  manager:
+    host: 127.0.0.1
+    port: 8911
