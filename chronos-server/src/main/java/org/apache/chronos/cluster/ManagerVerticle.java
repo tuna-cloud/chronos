@@ -6,7 +6,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class ManagerVerticle extends AbstractVerticle {
-  private Logger logger = LogManager.getLogger(ManagerVerticle.class);
+  private final Logger logger = LogManager.getLogger(ManagerVerticle.class);
 
   @Override
   public void start(Promise<Void> startPromise) throws Exception {
