@@ -22,7 +22,6 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetClientOptions;
 import io.vertx.core.spi.cluster.ClusterManager;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.chronos.common.Constant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -131,7 +130,7 @@ public class MetaFollower {
           if (e.state() == IdleState.READER_IDLE) {
             Ping ping = Ping.create();
             ping.setNodeId(selfNodeId);
-//            ctx.channel().writeAndFlush(ping);
+            ctx.channel().writeAndFlush(ping);
           } else {
             ctx.fireUserEventTriggered(evt);
           }
