@@ -22,6 +22,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetClientOptions;
 import io.vertx.core.spi.cluster.ClusterManager;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.chronos.common.Constant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,6 +34,7 @@ public class MetaFollower {
   private final Context context;
   private NetClient netClientToLeader;
   private String selfNodeId;
+  private AtomicBoolean notReconnect = new AtomicBoolean(false);
 
 
   public MetaFollower(Vertx vertx, Context context) {
@@ -65,6 +67,7 @@ public class MetaFollower {
   }
 
   public void stop(Promise<Void> stopPromise) {
+    notReconnect.set(true);
     netClientToLeader.close().onComplete(r -> {
       if (r.succeeded()) {
         stopPromise.complete();
@@ -82,6 +85,7 @@ public class MetaFollower {
 
     NetClientOptions options = new NetClientOptions();
     options.setReconnectAttempts(Integer.MAX_VALUE);
+    options.setReconnectInterval(3000);
     netClientToLeader = vertx.createNetClient(options);
 
     doConnect(leaderNodeId, host, leaderPort, promise);
@@ -106,6 +110,10 @@ public class MetaFollower {
 
       soi.closeHandler(v -> {
         log.info("Leader Connection closed.");
+        if (!notReconnect.get()) {
+          log.info("Leader Connection closed, try reconnect.");
+          doConnect(leaderNodeId, host, port, Promise.promise());
+        }
       });
 
       promise.complete();
