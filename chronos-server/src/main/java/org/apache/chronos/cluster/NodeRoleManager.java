@@ -6,8 +6,10 @@ import io.netty.util.internal.StringUtil;
 import io.vertx.core.Context;
 import io.vertx.core.Promise;
 import io.vertx.core.impl.VertxImpl;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.shareddata.Lock;
 import io.vertx.core.spi.cluster.ClusterManager;
+import io.vertx.core.spi.cluster.NodeInfo;
 import io.vertx.core.spi.cluster.NodeListener;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 import java.util.List;
@@ -27,7 +29,6 @@ public class NodeRoleManager implements NodeListener {
   private ClusterManager clusterManager;
   private MetaLeader metaLeader;
   private MetaFollower metaFollower;
-  private String leaderNodeId;
   private Lock leaderLock;
   private UUID leaderListenerId;
 
@@ -44,18 +45,18 @@ public class NodeRoleManager implements NodeListener {
 
     vertx.sharedData().<String, String>getAsyncMap(Constant.META_GLOBAL).compose(result -> result.get(Constant.META_GLOBAL_LEADER)).onComplete(result -> {
       if (result.succeeded()) {
-        leaderNodeId = result.result();
-        if (StringUtil.isNullOrEmpty(leaderNodeId)) {
+        if (StringUtil.isNullOrEmpty(result.result())) {
           log.info("meta map: {} key: {} is null", Constant.META_GLOBAL, Constant.META_GLOBAL_LEADER);
           tryBecomeLeader(startPromise);
         } else {
-          log.info("meta map: {} key: {} value: {}", Constant.META_GLOBAL, Constant.META_GLOBAL_LEADER, leaderNodeId);
-          if (clusterManager.getNodeId().equals(leaderNodeId)) {
-            log.info("leader has exist, leaderNodeId: {}, tobe leader", leaderNodeId);
+          LeaderInfo leaderInfo = new JsonObject(result.result()).mapTo(LeaderInfo.class);
+          log.info("meta map: {} key: {} value: {}", Constant.META_GLOBAL, Constant.META_GLOBAL_LEADER, result.result());
+          if (clusterManager.getNodeId().equals(leaderInfo.getNodeId())) {
+            log.info("leader has exist, leaderInfo: {}, tobe leader", result.result());
             metaLeader = new MetaLeader(vertx, context);
             metaLeader.start(startPromise);
           } else {
-            log.info("leader has exist, leaderNodeId: {}, tobe follower", leaderNodeId);
+            log.info("leader has exist, leaderInfo: {}, tobe follower", result.result());
             metaFollower = new MetaFollower(vertx, context);
             metaFollower.start(startPromise);
           }
@@ -69,9 +70,9 @@ public class NodeRoleManager implements NodeListener {
       HazelcastInstance instance = ((HazelcastClusterManager) clusterManager).getHazelcastInstance();
       leaderListenerId = instance.getMap(Constant.META_GLOBAL).addEntryListener((EntryUpdatedListener<String, String>) event -> {
         log.info("Leader node change, new leaderNodeId: {}", event.getValue());
-        leaderNodeId = event.getValue();
-        if (!clusterManager.getNodeId().equals(leaderNodeId)) {
-          log.info("leader change, leaderNodeId: {}, tobe follower", leaderNodeId);
+        LeaderInfo leaderInfo = new JsonObject(event.getValue()).mapTo(LeaderInfo.class);
+        if (!clusterManager.getNodeId().equals(leaderInfo.getNodeId())) {
+          log.info("leader change, leaderInfo: {}, tobe follower", event.getValue());
           metaFollower = new MetaFollower(vertx, context);
           metaFollower.start(Promise.promise());
         }
@@ -138,8 +139,9 @@ public class NodeRoleManager implements NodeListener {
         log.info("tryBecomeLeader success, leaderNodeId: {}", clusterManager.getNodeId());
 
         vertx.sharedData().<String, String>getAsyncMap(Constant.META_GLOBAL).andThen(mapResult -> {
-          leaderNodeId = clusterManager.getNodeId();
-          mapResult.result().put(Constant.META_GLOBAL_LEADER, leaderNodeId);
+          NodeInfo nodeInfo = clusterManager.getNodeInfo();
+          mapResult.result().put(Constant.META_GLOBAL_LEADER,
+              JsonObject.mapFrom(new LeaderInfo(clusterManager.getNodeId(), nodeInfo.host(), context.config().getInteger(Constant.CFG_MANAGER_PORT, Constant.CFG_MANAGER_PORT_DEFAULT))).toString());
         }).onSuccess(r -> {
           metaLeader = new MetaLeader(vertx, context);
           metaLeader.start(startPromise);

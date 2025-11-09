@@ -10,7 +10,8 @@ import org.yaml.snakeyaml.Yaml;
 public class ConfigUtil {
 
   public static JsonObject readConfig() throws IOException {
-    String content = IOUtils.resourceToString("/chronos.yml", StandardCharsets.UTF_8);
+    String cfgFile = System.getProperty("chronos.config", "/chronos.yaml");
+    String content = IOUtils.resourceToString(cfgFile, StandardCharsets.UTF_8);
     return parseYamlToJson(content);
   }
 
