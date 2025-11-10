@@ -33,5 +33,14 @@ public enum ValueType {
   public void setDesc(String desc) {
     this.desc = desc;
   }
+
+  public static ValueType fromValue(int value) {
+    for (ValueType valueType : ValueType.values()) {
+      if (valueType.getValue() == value) {
+        return valueType;
+      }
+    }
+    return null;
+  }
 }
 

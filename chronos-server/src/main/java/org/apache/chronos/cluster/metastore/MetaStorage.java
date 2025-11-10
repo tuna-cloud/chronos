@@ -1,16 +1,17 @@
 package org.apache.chronos.cluster.metastore;
 
+import io.vertx.core.Context;
 import java.util.Collection;
 import java.util.List;
 import org.apache.chronos.cluster.meta.IMetaData;
 
 public class MetaStorage implements IMetaStorage {
-  private IMetaIndexManager indexManager;
-  private IMetaMemTable memTable;
+  private final IMetaIndexManager indexManager;
+  private final IMetaMemTable memTable;
 
-  public MetaStorage() {
+  public MetaStorage(Context context) {
     indexManager = new MetaIndexManager();
-    memTable = new MetaMemTable(new MetaBlockManager());
+    memTable = new MetaMemTable(new MetaBlockManager(), context);
   }
 
   @Override

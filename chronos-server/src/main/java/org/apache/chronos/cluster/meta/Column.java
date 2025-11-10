@@ -1,5 +1,6 @@
 package org.apache.chronos.cluster.meta;
 
+import io.netty.util.Recycler;
 import java.util.Map;
 
 public class Column implements IMetaData {
@@ -10,6 +11,33 @@ public class Column implements IMetaData {
   private long updatedAt;
   private String code;
   private ValueType valueType;
+
+  private final Recycler.Handle<Column> handle;
+
+  public Column(Recycler.Handle<Column> handle) {
+    this.handle = handle;
+  }
+
+  public void recycle() {
+    id = -1;
+    tags = null;
+    createdAt = -1;
+    updatedAt = -1;
+    code = null;
+    valueType = null;
+    handle.recycle(this);
+  }
+
+  private static final Recycler<Column> RECYCLER = new Recycler<Column>() {
+    @Override
+    protected Column newObject(Handle<Column> handle) {
+      return new Column(handle);
+    }
+  };
+
+  public static Column create() {
+    return RECYCLER.get();
+  }
 
   @Override
   public int getId() {
