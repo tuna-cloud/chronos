@@ -34,11 +34,15 @@ public class CfgUtil {
   }
 
   public static Integer getInteger(ChronosConfig key, JsonObject config) {
-    return getIntegerByPriority(config, key.getPropKey(), getByEnvOrProperties(key));
+    String[] keys = key.getPropKey().split("\\.");
+    JsonObject parent = getParent(config, keys);
+    return parent.getInteger(keys[keys.length - 1], Integer.parseInt(getByEnvOrProperties(key)));
   }
 
   public static Boolean getBoolean(ChronosConfig key, JsonObject config) {
-    return getBooleanByPriority(config, key.getPropKey(), getByEnvOrProperties(key));
+    String[] keys = key.getPropKey().split("\\.");
+    JsonObject parent = getParent(config, keys);
+    return parent.getBoolean(keys[keys.length - 1], Boolean.parseBoolean(getByEnvOrProperties(key)));
   }
 
   private static String getByEnvOrProperties(ChronosConfig key) {
@@ -60,17 +64,5 @@ public class CfgUtil {
       }
     }
     return result;
-  }
-
-  public static Integer getIntegerByPriority(JsonObject config, String key, String def) {
-    String[] keys = key.split("\\.");
-    JsonObject parent = getParent(config, keys);
-    return parent.getInteger(keys[keys.length - 1], Integer.parseInt(def));
-  }
-
-  public static Boolean getBooleanByPriority(JsonObject config, String key, String def) {
-    String[] keys = key.split("\\.");
-    JsonObject parent = getParent(config, keys);
-    return parent.getBoolean(keys[keys.length - 1], Boolean.parseBoolean(def));
   }
 }

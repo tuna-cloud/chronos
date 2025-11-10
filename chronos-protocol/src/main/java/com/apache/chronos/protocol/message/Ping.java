@@ -4,6 +4,8 @@ import io.netty.util.Recycler;
 
 public class Ping extends AbstractMessage {
 
+  private int metaVersion = -1;
+
   private final Recycler.Handle<Ping> handle;
 
   public Ping(Recycler.Handle<Ping> handle) {
@@ -31,5 +33,13 @@ public class Ping extends AbstractMessage {
   @Override
   public MessageType getMessageType() {
     return MessageType.PING;
+  }
+
+  public int getMetaVersion() {
+    return metaVersion;
+  }
+
+  public void setMetaVersion(int metaVersion) {
+    this.metaVersion = metaVersion;
   }
 }

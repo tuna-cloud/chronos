@@ -4,6 +4,7 @@ import io.netty.util.Recycler;
 
 public class Pong extends AbstractMessage {
 
+  private int metaVersion = -1;
   private final Recycler.Handle<Pong> handle;
 
   public Pong(Recycler.Handle<Pong> handle) {
@@ -30,5 +31,13 @@ public class Pong extends AbstractMessage {
   @Override
   public MessageType getMessageType() {
     return MessageType.PONG;
+  }
+
+  public int getMetaVersion() {
+    return metaVersion;
+  }
+
+  public void setMetaVersion(int metaVersion) {
+    this.metaVersion = metaVersion;
   }
 }

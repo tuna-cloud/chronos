@@ -33,7 +33,7 @@ public class MetaLeader {
   private final Context context;
   private NetServer netServer;
   private final Map<String, NetSocketInternal> followerSession = Maps.newConcurrentMap();
-  private final Map<String, String> nodeId2WriterHandlerId = Maps.newConcurrentMap();
+  private final Map<String, String> nodeId2ChannelId = Maps.newConcurrentMap();
 
   public MetaLeader(Vertx vertx, Context context) {
     this.vertx = vertx;
@@ -120,11 +120,11 @@ public class MetaLeader {
   }
 
   private void messageHandle(NetSocketInternal soi, AbstractMessage message) {
-    nodeId2WriterHandlerId.put(message.getNodeId(), soi.channelHandlerContext().channel().id().asShortText());
+    nodeId2ChannelId.put(message.getNodeId(), soi.channelHandlerContext().channel().id().asShortText());
   }
 
-  private void clearClosedSession(String writeHandlerID) {
-    nodeId2WriterHandlerId.entrySet().removeIf(entry -> entry.getValue().equals(writeHandlerID));
+  private void clearClosedSession(String channelId) {
+    nodeId2ChannelId.entrySet().removeIf(entry -> entry.getValue().equals(channelId));
   }
 
   public void broadcast(AbstractMessage message) {

@@ -13,10 +13,10 @@ public class CfgUtilTest {
     JsonObject jsonObject = new JsonObject();
     jsonObject.put("test", new JsonObject().put("value", "V"));
 
-    JsonObject parent = CfgUtil.getParent(jsonObject, "test.value");
+    JsonObject parent = CfgUtil.getParent(jsonObject, "test.value".split("\\."));
     Assertions.assertTrue(parent.containsKey("value"));
 
-    JsonObject parent1 = CfgUtil.getParent(jsonObject, "testValue");
+    JsonObject parent1 = CfgUtil.getParent(jsonObject, "testValue".split("\\."));
     Assertions.assertTrue(parent1.containsKey("test"));
   }
 }
