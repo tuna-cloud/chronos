@@ -3,7 +3,6 @@ package org.apache.chronos.cluster;
 import com.apache.chronos.protocol.codec.MessageDecoder;
 import com.apache.chronos.protocol.codec.MessageEncoder;
 import com.apache.chronos.protocol.message.AbstractMessage;
-import com.apache.chronos.protocol.message.Ping;
 import com.google.common.collect.Maps;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -16,13 +15,13 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.vertx.core.Context;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.impl.VertxImpl;
 import io.vertx.core.internal.net.NetSocketInternal;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.NetServer;
 import io.vertx.core.net.NetServerOptions;
 import java.util.Map;
-import org.apache.chronos.common.Constant;
+import org.apache.chronos.common.ChronosConfig;
+import org.apache.chronos.common.CfgUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,7 +31,6 @@ public class MetaLeader {
 
   private final Vertx vertx;
   private final Context context;
-  private final String localNodeId;
   private NetServer netServer;
   private final Map<String, NetSocketInternal> followerSession = Maps.newConcurrentMap();
   private final Map<String, String> nodeId2WriterHandlerId = Maps.newConcurrentMap();
@@ -40,14 +38,13 @@ public class MetaLeader {
   public MetaLeader(Vertx vertx, Context context) {
     this.vertx = vertx;
     this.context = context;
-    this.localNodeId = ((VertxImpl) vertx).clusterManager().getNodeId();
   }
 
   public void start(Promise<Void> startPromise) {
     JsonObject config = context.config();
     NetServerOptions options = new NetServerOptions();
-    options.setPort(config.getInteger(Constant.CFG_MANAGER_PORT, Constant.CFG_MANAGER_PORT_DEFAULT));
-    options.setReusePort(config.getBoolean(Constant.CFG_MANAGER_REUSE_PORT, Constant.CFG_MANAGER_REUSE_PORT_DEFAULT));
+    options.setPort(CfgUtil.getInteger(ChronosConfig.CFG_MANAGER_PORT, config));
+    options.setReusePort(CfgUtil.getBoolean(ChronosConfig.CFG_ENV_MANAGER_REUSE_PORT, config));
     options.setReuseAddress(true);
     options.setTcpFastOpen(true);
     options.setTcpKeepAlive(true);

@@ -5,6 +5,9 @@ public class LeaderInfo {
   private String host;
   private Integer port;
 
+  public LeaderInfo() {
+  }
+
   public LeaderInfo(String nodeId, String host, Integer port) {
     this.nodeId = nodeId;
     this.host = host;

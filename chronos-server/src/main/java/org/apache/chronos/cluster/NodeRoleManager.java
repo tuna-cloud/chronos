@@ -14,6 +14,8 @@ import io.vertx.core.spi.cluster.NodeListener;
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
 import java.util.List;
 import java.util.UUID;
+import org.apache.chronos.common.ChronosConfig;
+import org.apache.chronos.common.CfgUtil;
 import org.apache.chronos.common.Constant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -110,38 +112,50 @@ public class NodeRoleManager implements NodeListener {
     log.info("NodeRoleManager nodeLeft: {}", nodeID);
     clusterNodes.removeIf(nodeID::equals);
     log.info("clusterNodes: {}", clusterNodes.toString());
-    /**
-     * Cluster Leader is down, try to become leader
-     * First, if this node is a follower, stop it first.
-     */
-    if (nodeID.equals(leaderNodeId)) {
-      log.info("Cluster leader is down, try become leader");
-      if (metaFollower != null) {
-        Promise<Void> promise = Promise.promise();
-        try {
-          metaFollower.stop(promise);
-        } catch (Exception e) {
-          log.error("metaFollower stop err", e);
-          promise.complete();
+
+    vertx.sharedData().<String, String>getAsyncMap(Constant.META_GLOBAL).compose(result -> result.get(Constant.META_GLOBAL_LEADER)).onComplete(result -> {
+      if (result.succeeded()) {
+        if (!StringUtil.isNullOrEmpty(result.result())) {
+          LeaderInfo leaderInfo = new JsonObject(result.result()).mapTo(LeaderInfo.class);
+          log.info("meta map: {} key: {} value: {}, leftNode: {}", Constant.META_GLOBAL, Constant.META_GLOBAL_LEADER, result.result(), nodeID);
+          if (leaderInfo.getNodeId().equals(nodeID)) {
+            /**
+             * Cluster Leader is down, try to become leader
+             * First, if this node is a follower, stop it first.
+             */
+            log.info("Cluster leader is down, try become leader");
+            if (metaFollower != null) {
+              Promise<Void> promise = Promise.promise();
+              try {
+                metaFollower.stop(promise);
+              } catch (Exception e) {
+                log.error("metaFollower stop err", e);
+                promise.complete();
+              }
+              metaFollower = null;
+              promise.future().andThen(r -> tryBecomeLeader(Promise.promise()));
+            } else {
+              tryBecomeLeader(Promise.promise());
+            }
+          }
         }
-        metaFollower = null;
-        promise.future().andThen(r -> tryBecomeLeader(Promise.promise()));
       } else {
-        tryBecomeLeader(Promise.promise());
+        log.info("Get meta map err, try again.", result.cause());
+        vertx.setTimer(3000, id -> nodeLeft(nodeID));
       }
-    }
+    });
   }
 
   protected void tryBecomeLeader(Promise<Void> startPromise) {
     vertx.sharedData().getLock(Constant.LOCK_LEADER).onComplete(result -> {
       if (result.succeeded()) {
         leaderLock = result.result();
-        log.info("tryBecomeLeader success, leaderNodeId: {}", clusterManager.getNodeId());
+        log.info("tryBecomeLeader success, leaderNodeId: {}, host: {}, port: {}", clusterManager.getNodeId(), clusterManager.getNodeInfo().host(), clusterManager.getNodeInfo().port());
 
         vertx.sharedData().<String, String>getAsyncMap(Constant.META_GLOBAL).andThen(mapResult -> {
           NodeInfo nodeInfo = clusterManager.getNodeInfo();
           mapResult.result().put(Constant.META_GLOBAL_LEADER,
-              JsonObject.mapFrom(new LeaderInfo(clusterManager.getNodeId(), nodeInfo.host(), context.config().getInteger(Constant.CFG_MANAGER_PORT, Constant.CFG_MANAGER_PORT_DEFAULT))).toString());
+              JsonObject.mapFrom(new LeaderInfo(clusterManager.getNodeId(), nodeInfo.host(), CfgUtil.getInteger(ChronosConfig.CFG_MANAGER_PORT, context.config()))).toString());
         }).onSuccess(r -> {
           metaLeader = new MetaLeader(vertx, context);
           metaLeader.start(startPromise);

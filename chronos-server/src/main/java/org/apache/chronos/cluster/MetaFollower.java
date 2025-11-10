@@ -45,20 +45,12 @@ public class MetaFollower {
   public void start(Promise<Void> startPromise) {
     vertx.sharedData().<String, String>getAsyncMap(Constant.META_GLOBAL).compose(result -> result.get(Constant.META_GLOBAL_LEADER)).onComplete(result -> {
       if (result.succeeded()) {
-        String leaderNodeId = result.result();
+        LeaderInfo leaderInfo = new JsonObject(result.result()).mapTo(LeaderInfo.class);
 
         ClusterManager clusterManager = ((VertxImpl) vertx).clusterManager();
         selfNodeId = clusterManager.getNodeId();
 
-        clusterManager.getNodeInfo(leaderNodeId, (result1, failure) -> {
-          if (failure == null) {
-            String leaderHost = result1.host();
-            connectLeader(leaderNodeId, leaderHost).onComplete(startPromise);
-          } else {
-            log.error("Get Leader NodeInfo err", failure.getCause());
-            startPromise.fail(failure);
-          }
-        });
+        connectLeader(leaderInfo).onComplete(startPromise);
       } else {
         log.error("Get LeaderId err", result.cause());
         startPromise.fail(result.cause());
@@ -77,24 +69,21 @@ public class MetaFollower {
     });
   }
 
-  private Future<Void> connectLeader(String leaderNodeId, String host) {
+  private Future<Void> connectLeader(LeaderInfo leaderInfo) {
     Promise<Void> promise = Promise.promise();
-
-    JsonObject config = context.config();
-    int leaderPort = config.getInteger(Constant.CFG_MANAGER_PORT, Constant.CFG_MANAGER_PORT_DEFAULT);
 
     NetClientOptions options = new NetClientOptions();
     options.setReconnectAttempts(Integer.MAX_VALUE);
     options.setReconnectInterval(3000);
     netClientToLeader = vertx.createNetClient(options);
 
-    doConnect(leaderNodeId, host, leaderPort, promise);
+    doConnect(leaderInfo, promise);
     return promise.future();
   }
 
-  private void doConnect(String leaderNodeId, String host, int port, Promise<Void> promise) {
-    netClientToLeader.connect(port, host).onFailure(f -> promise.fail(f.getCause())).onSuccess(socket -> {
-      log.info("Connect to Leader success, host: {}, leaderNodeId: {}, selfNodeId: {}", host, leaderNodeId, selfNodeId);
+  private void doConnect(LeaderInfo leaderInfo, Promise<Void> promise) {
+    netClientToLeader.connect(leaderInfo.getPort(), leaderInfo.getHost()).onFailure(f -> promise.fail(f.getCause())).onSuccess(socket -> {
+      log.info("Connect to Leader success, host: {} port: {}, leaderNodeId: {}, selfNodeId: {}", leaderInfo.getHost(), leaderInfo.getPort(), leaderInfo.getNodeId(), selfNodeId);
       NetSocketInternal soi = (NetSocketInternal) socket;
       ChannelPipeline pipeline = soi.channelHandlerContext().pipeline();
 
@@ -111,8 +100,8 @@ public class MetaFollower {
       soi.closeHandler(v -> {
         log.info("Leader Connection closed.");
         if (!notReconnect.get()) {
-          log.info("Leader Connection closed, try reconnect.");
-          doConnect(leaderNodeId, host, port, Promise.promise());
+          log.info("Leader Connection closed, try reconnect. LeaderInfo host: {}, port: {}, nodeId: {}", leaderInfo.getHost(), leaderInfo.getPort(), leaderInfo.getNodeId());
+          doConnect(leaderInfo, Promise.promise());
         }
       });
 
