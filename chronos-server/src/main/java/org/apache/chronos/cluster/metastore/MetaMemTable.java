@@ -2,11 +2,14 @@ package org.apache.chronos.cluster.metastore;
 
 import io.vertx.core.Context;
 import io.vertx.core.Future;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.chronos.cluster.meta.IMetaData;
 
 public class MetaMemTable implements IMetaMemTable {
   private final Context context;
   private final IMetaBlockManager blockManager;
+  private final ConcurrentNavigableMap<Integer, IMetaData> metadataMap = new ConcurrentSkipListMap<>();
 
   public MetaMemTable(IMetaBlockManager blockManager, Context context) {
     this.blockManager = blockManager;
