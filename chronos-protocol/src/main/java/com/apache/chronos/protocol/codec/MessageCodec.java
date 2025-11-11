@@ -10,10 +10,10 @@ public abstract class MessageCodec<T extends AbstractMessage> {
   public abstract void encode(ByteBuf out, T message);
 
   protected void decodeAbstractMessage(ByteBuf buf, T message) {
-    message.setNodeId(CodecUtil.readString(buf, 1));
+    message.setNodeId(CodecUtil.readString(buf));
   }
 
   protected void encodeAbstractMessage(ByteBuf buf, T message) {
-    CodecUtil.writeString(buf, 1, message.getNodeId());
+    CodecUtil.writeString(buf, message.getNodeId());
   }
 }

@@ -1,17 +1,19 @@
 package org.apache.chronos.cluster.meta;
 
 import io.netty.util.Recycler;
+import java.io.Serializable;
+import java.util.List;
 import java.util.Map;
 
-public class Column implements IMetaData {
+public class Column implements IMetaData, Serializable {
 
   private int id;
-  private Map<String, String> tags;
   private long createdAt;
   private long updatedAt;
   private String code;
   private ValueType valueType;
-
+  private List<String> tags;
+  private Map<String, String> attrs;
   private final Recycler.Handle<Column> handle;
 
   public Column(Recycler.Handle<Column> handle) {
@@ -25,6 +27,7 @@ public class Column implements IMetaData {
     updatedAt = -1;
     code = null;
     valueType = null;
+    attrs = null;
     handle.recycle(this);
   }
 
@@ -49,11 +52,11 @@ public class Column implements IMetaData {
   }
 
   @Override
-  public Map<String, String> getTags() {
+  public List<String> getTags() {
     return tags;
   }
 
-  public void setTags(Map<String, String> tags) {
+  public void setTags(List<String> tags) {
     this.tags = tags;
   }
 
@@ -89,5 +92,13 @@ public class Column implements IMetaData {
 
   public void setValueType(ValueType valueType) {
     this.valueType = valueType;
+  }
+
+  public Map<String, String> getAttrs() {
+    return attrs;
+  }
+
+  public void setAttrs(Map<String, String> attrs) {
+    this.attrs = attrs;
   }
 }

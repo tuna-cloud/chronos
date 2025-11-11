@@ -1,4 +1,4 @@
-package org.apache.chronos.cluster.metastore;
+package org.apache.chronos.cluster.meta.serializer;
 
 import io.netty.buffer.ByteBuf;
 import org.apache.chronos.cluster.meta.IMetaData;

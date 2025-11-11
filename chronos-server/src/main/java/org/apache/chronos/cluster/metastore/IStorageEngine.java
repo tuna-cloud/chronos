@@ -1,10 +1,12 @@
 package org.apache.chronos.cluster.metastore;
 
+import io.vertx.core.Future;
 import java.util.Collection;
 import java.util.List;
 import org.apache.chronos.cluster.meta.IMetaData;
 
-public interface IMetaStorage {
+public interface IStorageEngine {
+  Future<Void> init();
 
   IMetaData getById(int id);
 

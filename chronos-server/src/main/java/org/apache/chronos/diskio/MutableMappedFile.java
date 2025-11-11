@@ -1,7 +1,8 @@
-package org.apache.chronos.cluster.metastore;
+package org.apache.chronos.diskio;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.ByteProcessor;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -82,30 +83,30 @@ public class MutableMappedFile {
     persist();
   }
 
-  /**
-   * 批量修改优化
-   */
-  public void batchModify(ByteProcessor modifier) throws IOException {
-    ByteBuf buffer = getWritableBuffer();
-
-    if (buffer.hasArray()) {
-      // 使用数组批量操作，性能最好
-      byte[] array = buffer.array();
-      int offset = buffer.arrayOffset();
-
-      for (int i = 0; i < buffer.capacity(); i++) {
-        array[offset + i] = modifier.process(array[offset + i]);
-      }
-    } else {
-      // 直接操作ByteBuf
-      for (int i = 0; i < buffer.capacity(); i++) {
-        byte modified = modifier.process(buffer.getByte(i));
-        buffer.setByte(i, modified);
-      }
-    }
-
-    persist();
-  }
+//  /**
+//   * 批量修改优化
+//   */
+//  public void batchModify(ByteProcessor modifier) throws Exception {
+//    ByteBuf buffer = getWritableBuffer();
+//
+//    if (buffer.hasArray()) {
+//      // 使用数组批量操作，性能最好
+//      byte[] array = buffer.array();
+//      int offset = buffer.arrayOffset();
+//
+//      for (int i = 0; i < buffer.capacity(); i++) {
+//        array[offset + i] = modifier.process(array[offset + i]);
+//      }
+//    } else {
+//      // 直接操作ByteBuf
+//      for (int i = 0; i < buffer.capacity(); i++) {
+//        byte modified = modifier.process(buffer.getByte(i));
+//        buffer.setByte(i, modified);
+//      }
+//    }
+//
+//    persist();
+//  }
 
   public void close() throws IOException {
     if (byteBuf != null) {

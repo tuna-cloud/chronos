@@ -1,6 +1,6 @@
 package org.apache.chronos.cluster.meta;
 
-import java.util.Map;
+import java.util.List;
 
 public interface IMetaData {
 
@@ -10,5 +10,5 @@ public interface IMetaData {
 
   long getUpdatedAt();
 
-  Map<String, String> getTags();
+  List<String> getTags();
 }

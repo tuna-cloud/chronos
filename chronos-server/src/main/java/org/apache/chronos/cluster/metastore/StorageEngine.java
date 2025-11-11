@@ -1,35 +1,41 @@
 package org.apache.chronos.cluster.metastore;
 
 import io.vertx.core.Context;
+import io.vertx.core.Future;
+import io.vertx.core.Vertx;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.chronos.cluster.meta.IMetaData;
 
-public class MetaStorage implements IMetaStorage {
-  private final IMetaIndexManager indexManager;
-  private final IMetaMemTable memTable;
+public class StorageEngine implements IStorageEngine {
 
-  public MetaStorage(Context context) {
-    indexManager = new MetaIndexManager();
-    memTable = new MetaMemTable(new MetaBlockManager(), context);
+  private final Context context;
+  private final Vertx vertx;
+  private final ConcurrentNavigableMap<Integer, IMetaData> metadataMap = new ConcurrentSkipListMap<>();
+
+  public StorageEngine(Vertx vertx, Context context) {
+    this.context = context;
+    this.vertx = vertx;
+  }
+
+  @Override
+  public Future<Void> init() {
+    // 1. load index
+    // 2. load meta data
+    // 3.
+    return null;
   }
 
   @Override
   public IMetaData getById(int id) {
-    Offset offset = indexManager.getById(id);
-    if (offset == null) {
-      return null;
-    }
-    return memTable.getById(id);
+    return null;
   }
 
   @Override
   public IMetaData getByCode(String code) {
-    Offset offset = indexManager.getByCode(code);
-    if (offset == null) {
-      return null;
-    }
-    return memTable.getByCode(code);
+    return null;
   }
 
   @Override

@@ -4,6 +4,8 @@ public class Offset {
   private int blockId;
   private int offset;
   private int length;
+  private long created;
+  private long updated;
 
   public int getBlockId() {
     return blockId;
@@ -27,5 +29,21 @@ public class Offset {
 
   public void setLength(int length) {
     this.length = length;
+  }
+
+  public long getCreated() {
+    return created;
+  }
+
+  public void setCreated(long created) {
+    this.created = created;
+  }
+
+  public long getUpdated() {
+    return updated;
+  }
+
+  public void setUpdated(long updated) {
+    this.updated = updated;
   }
 }

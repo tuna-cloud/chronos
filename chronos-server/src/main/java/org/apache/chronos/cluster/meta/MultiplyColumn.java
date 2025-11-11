@@ -7,14 +7,13 @@ import java.util.Map;
 public class MultiplyColumn implements IMetaData {
 
   private int id;
-  private Map<String, String> tags;
-
   private long createdAt;
   private long updatedAt;
 
+  private List<String> tags;
   private List<String> codes;
   private List<ValueType> types;
-
+  private Map<String, String> attrs;
   private final Recycler.Handle<MultiplyColumn> handle;
 
   public MultiplyColumn(Recycler.Handle<MultiplyColumn> handle) {
@@ -28,6 +27,7 @@ public class MultiplyColumn implements IMetaData {
     updatedAt = -1;
     codes = null;
     types = null;
+    attrs = null;
     handle.recycle(this);
   }
 
@@ -52,11 +52,11 @@ public class MultiplyColumn implements IMetaData {
   }
 
   @Override
-  public Map<String, String> getTags() {
+  public List<String> getTags() {
     return tags;
   }
 
-  public void setTags(Map<String, String> tags) {
+  public void setTags(List<String> tags) {
     this.tags = tags;
   }
 
@@ -92,5 +92,13 @@ public class MultiplyColumn implements IMetaData {
 
   public void setTypes(List<ValueType> types) {
     this.types = types;
+  }
+
+  public Map<String, String> getAttrs() {
+    return attrs;
+  }
+
+  public void setAttrs(Map<String, String> attrs) {
+    this.attrs = attrs;
   }
 }
