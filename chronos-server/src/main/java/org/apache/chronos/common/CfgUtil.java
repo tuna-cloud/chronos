@@ -45,6 +45,12 @@ public class CfgUtil {
     return parent.getBoolean(keys[keys.length - 1], Boolean.parseBoolean(getByEnvOrProperties(key)));
   }
 
+  public static String getString(ChronosConfig key, JsonObject config) {
+    String[] keys = key.getPropKey().split("\\.");
+    JsonObject parent = getParent(config, keys);
+    return parent.getString(keys[keys.length - 1], getByEnvOrProperties(key));
+  }
+
   private static String getByEnvOrProperties(ChronosConfig key) {
     String value = System.getenv(key.getEnvKey());
     if (StringUtils.isEmpty(value)) {

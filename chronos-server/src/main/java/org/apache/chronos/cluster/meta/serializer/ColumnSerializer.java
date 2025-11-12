@@ -4,6 +4,7 @@ import com.apache.chronos.protocol.codec.CodecUtil;
 import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
 import java.util.List;
+import java.util.Map;
 import org.apache.chronos.cluster.meta.Column;
 import org.apache.chronos.cluster.meta.ValueType;
 
@@ -18,15 +19,8 @@ public class ColumnSerializer implements IMetaDataSerializer<Column> {
     CodecUtil.writeVarLong(byteBuf, metaData.getUpdatedAt());
     byteBuf.writeByte(metaData.getValueType().getValue());
     CodecUtil.writeString(byteBuf, metaData.getCode());
-    List<String> tags = metaData.getTags();
-    if (tags != null && !tags.isEmpty()) {
-      byteBuf.writeByte(tags.size());
-      for (String tag : tags) {
-        CodecUtil.writeString(byteBuf, tag);
-      }
-    } else {
-      byteBuf.writeByte(0);
-    }
+    CodecUtil.writeList(byteBuf, metaData.getTags());
+    CodecUtil.writeMap(byteBuf, metaData.getAttrs());
   }
 
   @Override
@@ -37,13 +31,8 @@ public class ColumnSerializer implements IMetaDataSerializer<Column> {
     column.setUpdatedAt(CodecUtil.readVarLong(byteBuf));
     column.setValueType(ValueType.fromValue(byteBuf.readUnsignedByte()));
     column.setCode(CodecUtil.readString(byteBuf));
-    int tags = byteBuf.readUnsignedByte();
-    if (tags > 0) {
-      column.setTags(Lists.newArrayListWithCapacity(tags));
-      for (int i = 0; i < tags; i++) {
-        column.getTags().add(CodecUtil.readString(byteBuf));
-      }
-    }
+    column.setTags(CodecUtil.readList(byteBuf));
+    column.setAttrs(CodecUtil.readMap(byteBuf));
     return column;
   }
 }

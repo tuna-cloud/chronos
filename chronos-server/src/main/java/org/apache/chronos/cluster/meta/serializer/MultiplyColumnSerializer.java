@@ -16,24 +16,8 @@ public class MultiplyColumnSerializer implements IMetaDataSerializer<MultiplyCol
     byteBuf.writeInt(metaData.getId());
     byteBuf.writeLong(metaData.getCreatedAt());
     byteBuf.writeLong(metaData.getUpdatedAt());
-    List<String> tags = metaData.getTags();
-    if (tags != null && !tags.isEmpty()) {
-      byteBuf.writeByte(tags.size());
-      for (String tag : tags) {
-        CodecUtil.writeString(byteBuf, tag);
-      }
-    } else {
-      byteBuf.writeByte(0);
-    }
-    List<String> codes = metaData.getCodes();
-    if (codes != null && !codes.isEmpty()) {
-      byteBuf.writeByte(codes.size());
-      for (String code : codes) {
-        CodecUtil.writeString(byteBuf, code);
-      }
-    } else {
-      byteBuf.writeByte(0);
-    }
+    CodecUtil.writeList(byteBuf, metaData.getTags());
+    CodecUtil.writeList(byteBuf, metaData.getCodes());
     List<ValueType> types = metaData.getTypes();
     if (types != null && !types.isEmpty()) {
       byteBuf.writeByte(types.size());
@@ -43,6 +27,7 @@ public class MultiplyColumnSerializer implements IMetaDataSerializer<MultiplyCol
     } else {
       byteBuf.writeByte(0);
     }
+    CodecUtil.writeMap(byteBuf, metaData.getAttrs());
   }
 
   @Override
@@ -51,27 +36,16 @@ public class MultiplyColumnSerializer implements IMetaDataSerializer<MultiplyCol
     column.setId(byteBuf.readInt());
     column.setCreatedAt(byteBuf.readLong());
     column.setUpdatedAt(byteBuf.readLong());
+    column.setTags(CodecUtil.readList(byteBuf));
+    column.setCodes(CodecUtil.readList(byteBuf));
     int length = byteBuf.readUnsignedByte();
-    if (length > 0) {
-      column.setTags(Lists.newArrayListWithCapacity(length));
-      for (int i = 0; i < length; i++) {
-        column.getTags().add(CodecUtil.readString(byteBuf));
-      }
-    }
-    length = byteBuf.readUnsignedByte();
-    if (length > 0) {
-      column.setCodes(Lists.newArrayListWithCapacity(length));
-      for (int i = 0; i < length; i++) {
-        column.getCodes().add(CodecUtil.readString(byteBuf));
-      }
-    }
-    length = byteBuf.readUnsignedByte();
     if (length > 0) {
       column.setTypes(Lists.newArrayListWithCapacity(length));
       for (int i = 0; i < length; i++) {
         column.getTypes().add(ValueType.fromValue(byteBuf.readUnsignedByte()));
       }
     }
+    column.setAttrs(CodecUtil.readMap(byteBuf));
     return column;
   }
 }

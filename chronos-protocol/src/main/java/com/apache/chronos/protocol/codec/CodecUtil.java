@@ -1,8 +1,13 @@
 package com.apache.chronos.protocol.codec;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import io.netty.buffer.ByteBuf;
 import io.netty.util.internal.StringUtil;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 
 public final class CodecUtil {
 
@@ -166,5 +171,53 @@ public final class CodecUtil {
         throw new RuntimeException("var int flag exception: " + flag);
       }
     }
+  }
+
+
+  public static void writeMap(ByteBuf buf, Map<String, String> map) {
+    if (map == null) {
+      writeVarInt(buf, 0);
+    } else {
+      writeVarInt(buf, map.size());
+      for (Entry<String, String> entry : map.entrySet()) {
+        writeString(buf, entry.getKey());
+        writeString(buf, entry.getValue());
+      }
+    }
+  }
+
+  public static Map<String, String> readMap(ByteBuf buf) {
+    int size = readVarInt(buf);
+    if (size < 1) {
+      return null;
+    }
+    Map<String, String> map = Maps.newHashMapWithExpectedSize(size);
+    for (int i = 0; i < size; i++) {
+      map.put(readString(buf), readString(buf));
+    }
+    return map;
+  }
+
+  public static void writeList(ByteBuf buf, List<String> list) {
+    if (list == null) {
+      writeVarInt(buf, 0);
+    } else {
+      writeVarInt(buf, list.size());
+      for (String s : list) {
+        writeString(buf, s);
+      }
+    }
+  }
+
+  public static List<String> readList(ByteBuf buf) {
+    int size = readVarInt(buf);
+    if (size < 1) {
+      return null;
+    }
+    List<String> list = Lists.newArrayListWithCapacity(size);
+    for (int i = 0; i < size; i++) {
+      list.add(readString(buf));
+    }
+    return list;
   }
 }

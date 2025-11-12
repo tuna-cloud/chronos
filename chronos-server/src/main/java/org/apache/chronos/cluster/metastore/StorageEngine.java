@@ -3,21 +3,24 @@ package org.apache.chronos.cluster.metastore;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.chronos.cluster.meta.IMetaData;
+import org.apache.chronos.common.CfgUtil;
+import org.apache.chronos.common.ChronosConfig;
 
 public class StorageEngine implements IStorageEngine {
 
   private final Context context;
   private final Vertx vertx;
-  private final ConcurrentNavigableMap<Integer, IMetaData> metadataMap = new ConcurrentSkipListMap<>();
+  private final IOffsetIndexStore offsetIndexStore;
 
-  public StorageEngine(Vertx vertx, Context context) {
+  public StorageEngine(Vertx vertx, Context context) throws IOException {
     this.context = context;
     this.vertx = vertx;
+    this.offsetIndexStore = new MemoryOffsetIndexStoreWrapper(new DiskOffsetIndex(new File(CfgUtil.getString(ChronosConfig.CFG_META_STORAGE_PATH, context.config()))));
   }
 
   @Override
@@ -64,7 +67,12 @@ public class StorageEngine implements IStorageEngine {
   }
 
   @Override
-  public long getVersion() {
+  public int getVersion() {
+    return offsetIndexStore.getMetaDataVersion();
+  }
+
+  @Override
+  public int getSize() {
     return 0;
   }
 }

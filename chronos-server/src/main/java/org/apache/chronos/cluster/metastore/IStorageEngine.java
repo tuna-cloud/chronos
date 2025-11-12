@@ -22,5 +22,7 @@ public interface IStorageEngine {
 
   void update(IMetaData metaData);
 
-  long getVersion();
+  int getVersion();
+
+  int getSize();
 }

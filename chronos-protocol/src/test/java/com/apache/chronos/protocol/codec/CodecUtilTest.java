@@ -1,7 +1,12 @@
 package com.apache.chronos.protocol.codec;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import java.util.List;
+import java.util.Map;
+import org.apache.logging.log4j.core.util.UuidUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -42,5 +47,27 @@ public class CodecUtilTest {
     Assertions.assertEquals(CodecUtil.readVarLong(byteBuf), 35184372088831L);
     Assertions.assertEquals(CodecUtil.readVarLong(byteBuf), 9007199254740991L);
     Assertions.assertEquals(CodecUtil.readVarLong(byteBuf), 2305843009213693951L);
+
+    List<String> list = Lists.newArrayList();
+    list.add(UuidUtil.getTimeBasedUuid().toString());
+    list.add(UuidUtil.getTimeBasedUuid().toString());
+    list.add(UuidUtil.getTimeBasedUuid().toString());
+    list.add(UuidUtil.getTimeBasedUuid().toString());
+    CodecUtil.writeList(byteBuf, list);
+
+    List<String> out = CodecUtil.readList(byteBuf);
+
+    Assertions.assertEquals(list, out);
+
+    Map<String, String> mapInput = Maps.newHashMap();
+    mapInput.put(UuidUtil.getTimeBasedUuid().toString(), UuidUtil.getTimeBasedUuid().toString());
+    mapInput.put(UuidUtil.getTimeBasedUuid().toString(), UuidUtil.getTimeBasedUuid().toString());
+    mapInput.put(UuidUtil.getTimeBasedUuid().toString(), UuidUtil.getTimeBasedUuid().toString());
+    mapInput.put(UuidUtil.getTimeBasedUuid().toString(), UuidUtil.getTimeBasedUuid().toString());
+    CodecUtil.writeMap(byteBuf, mapInput);
+
+    Map<String, String> mapOutput = CodecUtil.readMap(byteBuf);
+
+    Assertions.assertEquals(mapInput, mapOutput);
   }
 }

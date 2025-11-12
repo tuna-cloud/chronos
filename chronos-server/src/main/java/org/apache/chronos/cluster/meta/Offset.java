@@ -3,8 +3,16 @@ package org.apache.chronos.cluster.meta;
 import io.netty.util.Recycler;
 
 public class Offset {
-  public static final int TOTAL_SIZE = 25;
 
+  public static final int MAX_META_DATA_ID = 0x3FFFFFFF;
+  public static final int TOTAL_SIZE = 25;
+  public static final int STATUS_NULL = 0;
+  public static final int STATUS_NORMAL = 1;
+  public static final int STATUS_DELETED = 2;
+
+  /**
+   * 0: NULL 1: NORMAL 2: DELETED
+   */
   private byte status;
   private int blockId;
   private long offset;
