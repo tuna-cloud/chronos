@@ -35,29 +35,13 @@ public class WriteAheadLog {
 
   /**
    * 写入WAL记录
-   * @param data 记录数据
+   * @param metaDataId 记录数据
    * @return 写入的文件位置
    */
-  public long append(byte[] data) throws IOException {
+  public long append(int metaDataId) throws IOException {
     synchronized (this) {
       long position = fileChannel.position();
-
-      // 检查记录是否过大
-      if (data.length > bufferSize - 8) {
-        // 大记录直接写入，不经过缓冲区
-        return writeLargeRecord(data);
-      }
-
-      // 检查缓冲区空间
-      if (writeBuffer.remaining() < data.length + 8) {
-        flushBuffer();
-      }
-
-      // 写入记录头：魔数(4字节) + 长度(4字节)
-      writeBuffer.putInt(0x57414C31); // "WAL1" magic
-      writeBuffer.putInt(data.length);
-      writeBuffer.put(data);
-
+      writeBuffer.putInt(metaDataId);
       return position;
     }
   }
@@ -112,23 +96,6 @@ public class WriteAheadLog {
 
       return records;
     }
-  }
-
-  private long writeLargeRecord(byte[] data) throws IOException {
-    ByteBuffer header = ByteBuffer.allocate(8);
-    header.putInt(0x57414C31);
-    header.putInt(data.length);
-    header.flip();
-
-    ByteBuffer dataBuffer = ByteBuffer.wrap(data);
-
-    long position = fileChannel.position();
-
-    // 先写头，再写数据
-    fileChannel.write(header);
-    fileChannel.write(dataBuffer);
-
-    return position;
   }
 
   private void flushBuffer() throws IOException {
