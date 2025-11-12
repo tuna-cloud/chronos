@@ -46,6 +46,11 @@ public class MemoryOffsetIndexStoreWrapper implements IOffsetIndexStore {
   }
 
   @Override
+  public int getMaxMetaDataId() {
+    return diskOffsetIndex.getMaxMetaDataId();
+  }
+
+  @Override
   public int getSize() {
     return diskOffsetIndex.getSize();
   }

@@ -159,6 +159,9 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
       this.metaDataCounter--;
     }
     byteBuf.setByte(idx, Offset.STATUS_DELETED);
+    if (maxMetaDataId == metaDataId) {
+      findMaxMetaDataId();
+    }
     persist();
   }
 
@@ -168,7 +171,26 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
   }
 
   @Override
-  public int getSize() {
+  public synchronized int getMaxMetaDataId() {
+    return this.maxMetaDataId;
+  }
+
+  @Override
+  public synchronized int getSize() {
     return this.metaDataCounter;
+  }
+
+  private void findMaxMetaDataId() {
+    int tmpId = this.maxMetaDataId;
+    tmpId--;
+    while (tmpId > 0) {
+      int idx = (tmpId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
+      int status = byteBuf.getUnsignedByte(idx);
+      if (status == Offset.STATUS_NORMAL) {
+        break;
+      }
+      tmpId--;
+    }
+    this.maxMetaDataId = tmpId;
   }
 }

@@ -27,6 +27,7 @@ class DiskOffsetIndexTest {
 
     Assertions.assertEquals(diskOffsetIndex.getMetaDataVersion(), 3);
     Assertions.assertEquals(diskOffsetIndex.getSize(), 3);
+    Assertions.assertEquals(diskOffsetIndex.getMaxMetaDataId(), 101);
 
     Offset offset1New = diskOffsetIndex.getOffset(1);
     Offset offset2New = diskOffsetIndex.getOffset(100);
@@ -39,6 +40,9 @@ class DiskOffsetIndexTest {
     diskOffsetIndex.removeOffset(101);
     Assertions.assertEquals(diskOffsetIndex.getSize(), 2);
     Assertions.assertEquals(diskOffsetIndex.getMetaDataVersion(), 4);
+    Assertions.assertEquals(diskOffsetIndex.getMaxMetaDataId(), 100);
+    diskOffsetIndex.removeOffset(100);
+    Assertions.assertEquals(diskOffsetIndex.getMaxMetaDataId(), 1);
 
     offset3New = diskOffsetIndex.getOffset(101);
     Assertions.assertNull(offset3New);

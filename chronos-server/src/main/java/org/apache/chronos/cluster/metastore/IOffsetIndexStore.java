@@ -14,5 +14,7 @@ public interface IOffsetIndexStore {
 
   int getMetaDataVersion();
 
+  int getMaxMetaDataId();
+
   int getSize();
 }
