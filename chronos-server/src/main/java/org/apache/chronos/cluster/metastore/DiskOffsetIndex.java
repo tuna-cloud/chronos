@@ -26,10 +26,10 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
   private final FileChannel fileChannel;
   private MappedByteBuffer mappedBuffer;
   private ByteBuf byteBuf;
-  private volatile long fileSize;
-  private volatile int maxMetaDataId;
-  private volatile int metaDataVersion;
-  private volatile int metaDataCounter;
+  private long fileSize;
+  private int maxMetaDataId;
+  private int metaDataVersion;
+  private int metaDataCounter;
 
   public DiskOffsetIndex(File file) throws IOException {
     init(file);
