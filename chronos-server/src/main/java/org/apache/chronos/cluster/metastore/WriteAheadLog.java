@@ -3,34 +3,32 @@ package org.apache.chronos.cluster.metastore;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class WriteAheadLog {
 
+  private static final Logger log = LogManager.getLogger(WriteAheadLog.class);
   /**
    * Just record all meta data id. All MetaData Follower update its meta data by metaDataId
    */
   private final FileChannel fileChannel;
   private final ByteBuffer writeBuffer;
   private final String filePath;
-  private final int bufferSize;
-  private long committedPosition = 0;
 
   public WriteAheadLog(String filePath, int bufferSize) throws IOException {
     this.filePath = filePath;
-    this.bufferSize = bufferSize;
-
     this.fileChannel = FileChannel.open(
         Paths.get(filePath),
         StandardOpenOption.CREATE,
-        StandardOpenOption.READ,
         StandardOpenOption.WRITE,
         StandardOpenOption.APPEND
     );
-
     this.writeBuffer = ByteBuffer.allocateDirect(bufferSize);
   }
 
@@ -44,6 +42,9 @@ public class WriteAheadLog {
     synchronized (this) {
       long position = fileChannel.position();
       writeBuffer.putInt(metaDataId);
+      if (!writeBuffer.hasRemaining()) {
+        commit();
+      }
       return position;
     }
   }
@@ -58,7 +59,6 @@ public class WriteAheadLog {
         fileChannel.write(writeBuffer);
         writeBuffer.clear();
         fileChannel.force(true); // 强制刷盘，包括元数据
-        committedPosition = fileChannel.position();
       }
     }
   }
@@ -66,14 +66,29 @@ public class WriteAheadLog {
   /**
    * 读取从指定位置开始的记录
    */
-  public ByteBuf readFrom(long position) throws IOException {
+  public ByteBuf readFrom(long position, int maxLength) throws IOException {
     try (FileChannel readChannel = FileChannel.open(Paths.get(filePath), StandardOpenOption.READ)) {
-
       readChannel.position(position);
-      ByteBuffer buffer = ByteBuffer.allocate((int) (fileChannel.size() - position));
-      int reads = readChannel.read(buffer);
+      int size = (int) (fileChannel.size() - position);
+      size = Math.min(size, maxLength);
+      ByteBuffer buffer = ByteBuffer.allocate(size);
+      readChannel.read(buffer, position);
       buffer.flip();
       return Unpooled.wrappedBuffer(buffer);
+    }
+  }
+
+  public void truncateTo(long endPosition) {
+    try (RandomAccessFile file = new RandomAccessFile(filePath, "rw");
+        FileChannel channel = file.getChannel()) {
+      ByteBuffer buffer = ByteBuffer.allocate((int) (channel.size() - endPosition));
+      channel.position(endPosition);
+      channel.read(buffer);
+      channel.truncate(0);
+      buffer.flip();
+      channel.write(buffer);
+    } catch (Exception e) {
+      log.error("truncate err", e);
     }
   }
 
