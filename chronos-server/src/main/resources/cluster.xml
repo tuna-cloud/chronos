@@ -568,4 +568,13 @@
         </edge-defaults>
     </jet>
     <integrity-checker enabled="false"/>
+
+    <split-brain-protection name="splitBrainProtectionRuleWithThreeMembers" enabled="true">
+        <minimum-cluster-size>2</minimum-cluster-size>
+        <protect-on>READ_WRITE</protect-on>
+<!--        <function-class-name>com.your-package.AbsPresMySplitBrainProtection</function-class-name>-->
+<!--        <listeners>-->
+<!--            <listener>com.your-package.ThreeMemberSplitBrainProtectionListener</listener>-->
+<!--        </listeners>-->
+    </split-brain-protection>
 </hazelcast>
