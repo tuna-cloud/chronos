@@ -4,7 +4,8 @@ public enum ChronosConfig {
   CFG_FILE("CHRONOS_CONF", "chronos.conf", "/chronos.yml"),
   CFG_MANAGER_PORT("CHRONOS_MANAGER_PORT", "chronos.manager.port", "8911"),
   CFG_ENV_MANAGER_REUSE_PORT("CHRONOS_MANAGER_REUSE_PORT", "chronos.manager.reusePort", "true"),
-  CFG_META_STORAGE_PATH("CHRONOS_META_STORAGE_PATH", "chronos.meta.storage.path", "./data/metaStore")
+  CFG_META_STORAGE_PATH("CHRONOS_META_STORAGE_PATH", "chronos.meta.storage.path", "./data/metaStore"),
+  CFG_META_TAGS_INDEX_CAPACITY("CFG_META_TAGS_INDEX_CAPACITY", "cfg.meta.tags.index.capacity", "1000000")
   ;
   private String envKey;
   private String propKey;

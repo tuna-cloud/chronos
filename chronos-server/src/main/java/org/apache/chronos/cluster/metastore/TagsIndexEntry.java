@@ -1,6 +1,10 @@
 package org.apache.chronos.cluster.metastore;
 
 public class TagsIndexEntry {
+
+  /**
+   * max length: 16 bytes
+   */
   private String tag;
   private int indexOffset;
   private int blockId;
