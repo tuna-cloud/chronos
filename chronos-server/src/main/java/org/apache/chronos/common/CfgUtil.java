@@ -39,6 +39,12 @@ public class CfgUtil {
     return parent.getInteger(keys[keys.length - 1], Integer.parseInt(getByEnvOrProperties(key)));
   }
 
+  public static Long getLong(ChronosConfig key, JsonObject config) {
+    String[] keys = key.getPropKey().split("\\.");
+    JsonObject parent = getParent(config, keys);
+    return parent.getLong(keys[keys.length - 1], Long.parseLong(getByEnvOrProperties(key)));
+  }
+
   public static Boolean getBoolean(ChronosConfig key, JsonObject config) {
     String[] keys = key.getPropKey().split("\\.");
     JsonObject parent = getParent(config, keys);

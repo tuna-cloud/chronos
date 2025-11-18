@@ -9,6 +9,8 @@ import java.lang.reflect.Method;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.chronos.cluster.meta.Offset;
 import org.apache.chronos.cluster.meta.serializer.OffsetSerializer;
 import org.apache.logging.log4j.LogManager;
@@ -30,8 +32,10 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
   private int maxMetaDataId;
   private int metaDataVersion;
   private int metaDataCounter;
+  private final ReadWriteLock readWriteLock;
 
   public DiskOffsetIndex(File file) throws IOException {
+    this.readWriteLock = new ReentrantReadWriteLock();
     init(file);
     this.fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
     this.fileSize = fileChannel.size();
@@ -62,19 +66,24 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
   }
 
   private void expandSpaceIfNecessary(int actualWrtIndex) throws IOException {
-    long availableSpace = fileSize - actualWrtIndex;
-    if (availableSpace < (DEFAULT_PAGE_SIZE >> 2)) {
-      log.info("Meta index file space not enough, try to expand. availableSpace: {}", availableSpace);
-      persist();
-      // 2. 解除当前内存映射
-      clean(mappedBuffer);
-      byteBuf.release();
-      // 3. 调整文件大小
-      fileSize += DEFAULT_PAGE_SIZE;
-      fileChannel.truncate(fileSize);
-      // 4. 重新建立内存映射
-      this.mappedBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, fileSize);
-      this.byteBuf = Unpooled.wrappedBuffer(mappedBuffer);
+    readWriteLock.writeLock().lock();
+    try {
+      long availableSpace = fileSize - actualWrtIndex;
+      if (availableSpace < (DEFAULT_PAGE_SIZE >> 2)) {
+        log.info("Meta index file space not enough, try to expand. availableSpace: {}", availableSpace);
+        persist();
+        // 2. 解除当前内存映射
+        clean(mappedBuffer);
+        byteBuf.release();
+        // 3. 调整文件大小
+        fileSize += DEFAULT_PAGE_SIZE;
+        fileChannel.truncate(fileSize);
+        // 4. 重新建立内存映射
+        this.mappedBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, fileSize);
+        this.byteBuf = Unpooled.wrappedBuffer(mappedBuffer);
+      }
+    } finally {
+      readWriteLock.writeLock().unlock();
     }
   }
 
@@ -118,66 +127,96 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
   }
 
   @Override
-  public synchronized void upsertOffset(int metaDataId, Offset offset) throws IOException {
-    int wtx = (metaDataId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
-    expandSpaceIfNecessary(wtx + Offset.TOTAL_SIZE);
-    if (maxMetaDataId < metaDataId) {
-      this.maxMetaDataId = metaDataId;
-    }
-    int status = byteBuf.getUnsignedByte(wtx);
-    if (status != Offset.STATUS_NORMAL) {
-      this.metaDataCounter++;
-    }
-    this.metaDataVersion++;
-    OffsetSerializer.INSTANCE.serialize(byteBuf.slice(wtx, Offset.TOTAL_SIZE).writerIndex(0), offset);
-    persist();
-  }
-
-  @Override
-  public synchronized Offset getOffset(int metaDataId) {
-    if (maxMetaDataId < metaDataId) {
-      return null;
-    }
-    int rdx = (metaDataId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
-    int status = byteBuf.getUnsignedByte(rdx);
-    if (status == Offset.STATUS_NORMAL) {
-      return OffsetSerializer.INSTANCE.deserialize(byteBuf.slice(rdx, Offset.TOTAL_SIZE).readerIndex(0));
-    } else {
-      return null;
+  public void upsertOffset(int metaDataId, Offset offset) throws IOException {
+    readWriteLock.writeLock().lock();
+    try {
+      int wtx = (metaDataId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
+      expandSpaceIfNecessary(wtx + Offset.TOTAL_SIZE);
+      if (maxMetaDataId < metaDataId) {
+        this.maxMetaDataId = metaDataId;
+      }
+      int status = byteBuf.getUnsignedByte(wtx);
+      if (status != Offset.STATUS_NORMAL) {
+        this.metaDataCounter++;
+      }
+      this.metaDataVersion++;
+      OffsetSerializer.INSTANCE.serialize(byteBuf.slice(wtx, Offset.TOTAL_SIZE).writerIndex(0), offset);
+      persist();
+    } finally {
+      readWriteLock.writeLock().unlock();
     }
   }
 
   @Override
-  public synchronized void removeOffset(int metaDataId) throws IOException {
+  public Offset getOffset(int metaDataId) {
+    if (maxMetaDataId < metaDataId) {
+      return null;
+    }
+    readWriteLock.readLock().lock();
+    try {
+      int rdx = (metaDataId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
+      int status = byteBuf.getUnsignedByte(rdx);
+      if (status == Offset.STATUS_NORMAL) {
+        return OffsetSerializer.INSTANCE.deserialize(byteBuf.slice(rdx, Offset.TOTAL_SIZE).readerIndex(0));
+      } else {
+        return null;
+      }
+    } finally {
+      readWriteLock.readLock().unlock();
+    }
+  }
+
+  @Override
+  public void removeOffset(int metaDataId) throws IOException {
     if (maxMetaDataId < metaDataId) {
       return;
     }
-    this.metaDataVersion++;
-    int idx = (metaDataId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
-    int status = byteBuf.getUnsignedByte(idx);
-    if (status == Offset.STATUS_NORMAL) {
-      this.metaDataCounter--;
+    readWriteLock.writeLock().lock();
+    try {
+      this.metaDataVersion++;
+      int idx = (metaDataId - 1) * Offset.TOTAL_SIZE + FILE_HEADER_SIZE;
+      int status = byteBuf.getUnsignedByte(idx);
+      if (status == Offset.STATUS_NORMAL) {
+        this.metaDataCounter--;
+      }
+      byteBuf.setByte(idx, Offset.STATUS_DELETED);
+      if (maxMetaDataId == metaDataId) {
+        findMaxMetaDataId();
+      }
+      persist();
+    } finally {
+      readWriteLock.writeLock().unlock();
     }
-    byteBuf.setByte(idx, Offset.STATUS_DELETED);
-    if (maxMetaDataId == metaDataId) {
-      findMaxMetaDataId();
-    }
-    persist();
   }
 
   @Override
-  public synchronized int getMetaDataVersion() {
-    return this.metaDataVersion;
+  public int getMetaDataVersion() {
+    readWriteLock.readLock().lock();
+    try {
+      return this.metaDataVersion;
+    } finally {
+      readWriteLock.readLock().unlock();
+    }
   }
 
   @Override
   public synchronized int getMaxMetaDataId() {
-    return this.maxMetaDataId;
+    readWriteLock.readLock().lock();
+    try {
+      return this.maxMetaDataId;
+    } finally {
+      readWriteLock.readLock().unlock();
+    }
   }
 
   @Override
   public synchronized int getSize() {
-    return this.metaDataCounter;
+    readWriteLock.readLock().lock();
+    try {
+      return this.metaDataCounter;
+    } finally {
+      readWriteLock.readLock().unlock();
+    }
   }
 
   private void findMaxMetaDataId() {
