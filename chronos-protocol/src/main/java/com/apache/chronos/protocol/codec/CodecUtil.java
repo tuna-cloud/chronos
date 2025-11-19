@@ -37,6 +37,14 @@ public final class CodecUtil {
     return buf.readCharSequence(length, StandardCharsets.UTF_8).toString();
   }
 
+  public static String getString(ByteBuf buf, int pos) {
+    int length = getVarInt(buf, pos);
+    if (length == 0) {
+      return null;
+    }
+    return buf.getCharSequence(pos, length, StandardCharsets.UTF_8).toString();
+  }
+
   public static void writeString(ByteBuf buf, String value) {
     if (StringUtil.isNullOrEmpty(value)) {
       writeVarInt(buf, 0);
@@ -44,6 +52,16 @@ public final class CodecUtil {
       byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
       writeVarInt(buf, valueBytes.length);
       buf.writeBytes(valueBytes);
+    }
+  }
+
+  public static void setString(ByteBuf buf, int pos, String value) {
+    if (StringUtil.isNullOrEmpty(value)) {
+      setVarInt(buf, pos, 0);
+    } else {
+      byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
+      setVarInt(buf, pos, valueBytes.length);
+      buf.setBytes(pos, valueBytes);
     }
   }
 
@@ -62,6 +80,26 @@ public final class CodecUtil {
       buf.writeByte((value >>> 16) & 0xFF);
       buf.writeByte((value >>> 8) & 0xFF);
       buf.writeByte(value & 0xFF);
+    } else {
+      throw new RuntimeException("value is too big: " + value);
+    }
+  }
+
+  public static void setVarInt(ByteBuf buf, int pos, int value) {
+    if (value < 64) {
+      buf.setByte(pos, value);
+    } else if (value < 16384) {
+      buf.setByte(pos,(value >>> 8) | (0B01 << 6));
+      buf.setByte(pos + 1,value & 0xFF);
+    } else if (value < 4194304) {
+      buf.setByte(pos,(value >>> 16) | (0B10 << 6));
+      buf.setByte(pos + 1,(value >>> 8) & 0xFF);
+      buf.setByte(pos + 2,value & 0xFF);
+    } else if (value < 1073741824) {
+      buf.setByte(pos,(value >>> 24) | (0B11 << 6));
+      buf.setByte(pos + 1,(value >>> 16) & 0xFF);
+      buf.setByte(pos + 2,(value >>> 8) & 0xFF);
+      buf.setByte(pos + 3,value & 0xFF);
     } else {
       throw new RuntimeException("value is too big: " + value);
     }
@@ -132,6 +170,28 @@ public final class CodecUtil {
       }
       case 3 -> {
         return ((tmp & 0x3F) << 24) | buf.readUnsignedMedium();
+      }
+      default -> {
+        throw new RuntimeException("var int flag exception: " + flag);
+      }
+    }
+  }
+
+  public static int getVarInt(ByteBuf buf, int pos) {
+    int tmp = buf.getUnsignedByte(pos);
+    int flag = (tmp >>> 6) & 0xFF;
+    switch (flag) {
+      case 0 -> {
+        return tmp & 0x3F;
+      }
+      case 1 -> {
+        return ((tmp & 0x3F) << 8) | buf.getUnsignedByte(pos + 1);
+      }
+      case 2 -> {
+        return ((tmp & 0x3F) << 16) | buf.getUnsignedShort(pos + 1);
+      }
+      case 3 -> {
+        return ((tmp & 0x3F) << 24) | buf.getUnsignedMedium(pos + 1);
       }
       default -> {
         throw new RuntimeException("var int flag exception: " + flag);

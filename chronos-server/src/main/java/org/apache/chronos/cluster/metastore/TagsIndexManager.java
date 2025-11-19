@@ -2,6 +2,8 @@ package org.apache.chronos.cluster.metastore;
 
 import com.apache.chronos.protocol.codec.CodecUtil;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
@@ -11,11 +13,13 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.chronos.common.CfgUtil;
 import org.apache.chronos.common.ChronosConfig;
 import org.apache.commons.codec.digest.XXHash32;
 import org.roaringbitmap.IntIterator;
+import org.roaringbitmap.RoaringBitmap;
 
 public class TagsIndexManager {
 
@@ -38,7 +42,7 @@ public class TagsIndexManager {
   private FileChannel bitmapFileChannel;
   private MappedByteBuffer bitmapMappedByteBuffer;
   private ByteBuf bitmapByteBuf;
-  private AtomicLong writeIdx = new AtomicLong(0);
+  private AtomicInteger bitmapWriteIdx = new AtomicInteger(0);
 
   public TagsIndexManager(Vertx vertx, Context context, IOffsetIndexStore offsetIndexStore) throws Exception {
     this.indexFilePath = CfgUtil.getString(ChronosConfig.CFG_META_STORAGE_PATH, context.config());
@@ -75,13 +79,13 @@ public class TagsIndexManager {
       // version
       bitmapByteBuf.writeInt(0x01);
       // writer index
-      bitmapByteBuf.writeLong(writeIdx.get());
+      bitmapByteBuf.writeInt(bitmapWriteIdx.get());
     } else {
       bitmapFileChannel = FileChannel.open(bitmapFile.toPath(), StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
       bitmapMappedByteBuffer = bitmapFileChannel.map(FileChannel.MapMode.READ_WRITE, 0, bitmapFileChannel.size());
       bitmapMappedByteBuffer.flip();
       bitmapByteBuf = Unpooled.wrappedBuffer(bitmapMappedByteBuffer);
-      writeIdx.set(bitmapByteBuf.getLong(8));
+      bitmapWriteIdx.set(bitmapByteBuf.getInt(8));
     }
   }
 
@@ -100,8 +104,32 @@ public class TagsIndexManager {
     }
     checkIndexFileCapacity();
     checkBitmapFileCapacity();
+
     long pos = getPosition(tag);
-    CodecUtil.writeString(indexByteBuf, pos, tag);
+    int status = indexByteBuf.getUnsignedByte((int) pos);
+    // reserve 3 bytes
+    if (status == 1) { // tag exits
+      long offset = indexByteBuf.getLong((int) pos + 4);
+      int length = indexByteBuf.getInt((int) pos + 12);
+
+
+    } else { // tag not exits
+      // append RoaringBitmap to byte buffer.
+      int wrtIdx = bitmapWriteIdx.get();
+      bitmapByteBuf.writerIndex(wrtIdx);
+      // status 0: deleted 1: normal
+      bitmapByteBuf.writeByte(1);
+      bitmapByteBuf.writeInt((int) pos);
+      int lengthIdx = bitmapByteBuf.writerIndex();
+      bitmapByteBuf.writeInt(0);
+      RoaringBitmap roaringBitmap = new RoaringBitmap();
+      roaringBitmap.add(metaDataId);
+      writeRoaringBitmap(roaringBitmap);
+      bitmapByteBuf.setInt(lengthIdx, bitmapByteBuf.writerIndex() - lengthIdx - 4);
+      bitmapWriteIdx.set(bitmapByteBuf.writerIndex());
+      bitmapByteBuf.setInt(8, bitmapWriteIdx.get());
+    }
+    CodecUtil.setString(indexByteBuf, (int) pos, tag);
   }
 
   public void removeIndex(String tag, int metaDataId) throws Exception {
@@ -122,6 +150,18 @@ public class TagsIndexManager {
 
   private void checkBitmapFileCapacity() {
 
+  }
+
+  private RoaringBitmap readRoaringBitmap(int offset, int length) throws Exception {
+    RoaringBitmap roaringBitmap = new RoaringBitmap();
+    roaringBitmap.deserialize(new ByteBufInputStream(bitmapByteBuf.slice(offset, length).readerIndex(0)));
+    return roaringBitmap;
+  }
+
+  private int writeRoaringBitmap(RoaringBitmap bitmap) throws Exception {
+    int size = bitmap.serializedSizeInBytes();
+    bitmap.serialize(new ByteBufOutputStream(bitmapByteBuf));
+    return size;
   }
 
   private long getPosition(String tag) {
