@@ -124,11 +124,15 @@ public class TagsIndexManager {
       bitmapByteBuf.writeInt(0);
       RoaringBitmap roaringBitmap = new RoaringBitmap();
       roaringBitmap.add(metaDataId);
-      writeRoaringBitmap(roaringBitmap);
+      int size = writeRoaringBitmap(roaringBitmap);
       bitmapByteBuf.setInt(lengthIdx, bitmapByteBuf.writerIndex() - lengthIdx - 4);
       bitmapWriteIdx.set(bitmapByteBuf.writerIndex());
       bitmapByteBuf.setInt(8, bitmapWriteIdx.get());
+      indexByteBuf.setByte((int) pos, 1);
+      indexByteBuf.setLong((int) (pos + 4), wrtIdx);
+      indexByteBuf.setLong((int) (pos + 12), wrtIdx);
     }
+
     CodecUtil.setString(indexByteBuf, (int) pos, tag);
   }
 
