@@ -14,7 +14,6 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.StandardOpenOption;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.apache.chronos.common.CfgUtil;
 import org.apache.chronos.common.ChronosConfig;
 import org.apache.commons.codec.digest.XXHash32;

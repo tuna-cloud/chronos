@@ -5,7 +5,6 @@ import io.netty.buffer.Unpooled;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.lang.reflect.Method;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
@@ -13,6 +12,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.chronos.cluster.meta.Offset;
 import org.apache.chronos.cluster.meta.serializer.OffsetSerializer;
+import org.apache.chronos.common.FileUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,7 +73,7 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
         log.info("Meta index file space not enough, try to expand. availableSpace: {}", availableSpace);
         persist();
         // 2. 解除当前内存映射
-        clean(mappedBuffer);
+        FileUtil.clean(mappedBuffer);
         byteBuf.release();
         // 3. 调整文件大小
         fileSize += DEFAULT_PAGE_SIZE;
@@ -84,22 +84,6 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
       }
     } finally {
       readWriteLock.writeLock().unlock();
-    }
-  }
-
-  private void clean(MappedByteBuffer buffer) {
-    if (buffer == null) {
-      return;
-    }
-    try {
-      Method cleaner = buffer.getClass().getMethod("cleaner");
-      cleaner.setAccessible(true);
-      Object clean = cleaner.invoke(buffer);
-      if (clean != null) {
-        clean.getClass().getMethod("clean").invoke(clean);
-      }
-    } catch (Exception e) {
-      log.error("Meta Index clean failed", e);
     }
   }
 
@@ -118,7 +102,7 @@ public class DiskOffsetIndex implements IOffsetIndexStore {
       byteBuf.release();
     }
     if (mappedBuffer != null) {
-      clean(mappedBuffer); // 清理内存映射
+      FileUtil.clean(mappedBuffer); // 清理内存映射
       mappedBuffer = null;
     }
     if (fileChannel != null) {

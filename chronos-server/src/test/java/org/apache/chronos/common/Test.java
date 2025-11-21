@@ -14,12 +14,13 @@ public class Test {
     RoaringBitmap bitmap1 = new RoaringBitmap();
     RoaringBitmap bitmap2 = new RoaringBitmap();
 
+    System.out.println("size: " + bitmap2.getSizeInBytes());
     // 添加数据
     bitmap1.add(1, 2, 3, 1000, 1001, 1000000);
     for (int i = 0; i < 100_0000; i++) {
       bitmap2.add(i);
     }
-    System.out.println("size: " + bitmap2.getSizeInBytes());
+    System.out.println("size: " + bitmap2.getSizeInBytes() / 1024);
 
     // 集合运算
     RoaringBitmap and = RoaringBitmap.and(bitmap1, bitmap2);
