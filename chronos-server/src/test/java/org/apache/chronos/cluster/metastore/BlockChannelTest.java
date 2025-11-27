@@ -59,6 +59,9 @@ class BlockChannelTest {
     for (int i = 0; i < 1000000; i++) {
       Assertions.assertTrue(newMap2.contains(i), "" + i);
     }
+    Assertions.assertEquals(channel.getPageEntryNumber(32 + 16 + 100), 3);
+    Assertions.assertEquals(channel.getPageEntryNumber(32 + 16 + 100 + 128 * 1024), 1);
+    channel.prettyDebug();
   }
 
   private RoaringBitmap createOnePageMap(int max) {

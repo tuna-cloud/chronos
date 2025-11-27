@@ -1,10 +1,8 @@
 package org.apache.chronos.cluster.metastore;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.File;
@@ -12,6 +10,9 @@ import java.io.IOException;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.chronos.common.FileUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,6 +43,7 @@ import org.roaringbitmap.RoaringBitmap;
  * <p>
  */
 public class BlockChannel {
+
   private static final Logger log = LogManager.getLogger(BlockChannel.class);
 
   // bytes
@@ -56,7 +58,9 @@ public class BlockChannel {
   private final FileChannel fileChannel;
   private MappedByteBuffer mappedByteBuffer;
   private ByteBuf byteBuf;
-  private int wrtIdx;
+  private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+  private final Lock readLock = readWriteLock.readLock();
+  private final Lock writeLock = readWriteLock.writeLock();
 
   public BlockChannel(String filePath) throws Exception {
     File file = new File(filePath);
@@ -66,25 +70,25 @@ public class BlockChannel {
       mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, PAGE_SIZE * PAGE_NUM);
       byteBuf = Unpooled.wrappedBuffer(mappedByteBuffer);
       byteBuf.readerIndex(0);
-      byteBuf.writerIndex(0);
       updateBlockHeader(BLOCK_HEADER_SIZE);
+      byteBuf.writerIndex(BLOCK_HEADER_SIZE);
       persist();
     } else {
       fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
       mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, fileChannel.size());
       byteBuf = Unpooled.wrappedBuffer(mappedByteBuffer);
       byteBuf.readerIndex(0);
-      wrtIdx = byteBuf.getInt(4);
-      byteBuf.writerIndex(wrtIdx);
+      byteBuf.writerIndex(getWrtIdx());
     }
   }
 
   private void updateBlockHeader(int wrtIdx) {
-    this.wrtIdx = wrtIdx;
-    byteBuf.writerIndex(0);
-    byteBuf.writeInt(MAGIC_VALUE);
-    byteBuf.writeInt(wrtIdx);
-    byteBuf.writerIndex(wrtIdx);
+    byteBuf.setInt(0, MAGIC_VALUE);
+    byteBuf.setInt(4, wrtIdx);
+  }
+
+  private int getWrtIdx() {
+    return byteBuf.getInt(4);
   }
 
   protected void expandChannelFile() throws Exception {
@@ -102,7 +106,7 @@ public class BlockChannel {
     this.mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, newSize);
     this.byteBuf = Unpooled.wrappedBuffer(mappedByteBuffer);
     byteBuf.readerIndex(0);
-    byteBuf.writerIndex(wrtIdx);
+    byteBuf.writerIndex(getWrtIdx());
   }
 
   private void persist() throws IOException {
@@ -115,88 +119,91 @@ public class BlockChannel {
   }
 
   public int addRoaringBitmap(int tagIndex, RoaringBitmap roaringBitmap) throws Exception {
-    int needSize = roaringBitmap.serializedSizeInBytes();
-    while (getAvailableFileSize() < needSize + ENTRY_HEADER_SIZE + PAGE_HEADER_SIZE) {
-      expandChannelFile();
-    }
-    // The channel file has enough space to hold the data
-    int currentPageAvailableSize = PAGE_SIZE - getUsedPageSize(wrtIdx) - PAGE_HEADER_SIZE;
-    int pageIndex = getPageOffset(wrtIdx);
-    byteBuf.writerIndex(wrtIdx);
+    try {
+      writeLock.lock();
+      int needSize = roaringBitmap.serializedSizeInBytes();
+      while (getAvailableFileSize() < needSize + ENTRY_HEADER_SIZE + PAGE_HEADER_SIZE) {
+        expandChannelFile();
+      }
+      // The channel file has enough space to hold the data
+      int currentPageAvailableSize = PAGE_SIZE - getUsedPageSize(byteBuf.writerIndex()) - PAGE_HEADER_SIZE;
+      int pageIndex = getPageOffset(byteBuf.writerIndex());
 
-    if (pageIndex == wrtIdx) {
-      // Page Header: page size
-      byteBuf.writeInt(0);
-      // Page Header: reserve
-      byteBuf.writerIndex(byteBuf.writerIndex() + PAGE_HEADER_SIZE - 4);
-    }
-    int result = byteBuf.writerIndex();
-    // single page
-    if (needSize + ENTRY_HEADER_SIZE <= currentPageAvailableSize) {
-      log.info("write entry offset: {}, size: {}", result, needSize);
-      // update page header
-      addUsedPageSize(result, needSize + ENTRY_HEADER_SIZE);
-      // entry header 32 bytes
-      byteBuf.writeByte(1);
-      byteBuf.writeMedium(needSize);
-      // next entry offset
-      byteBuf.writeInt(0);
-      // tag index
-      byteBuf.writeInt(tagIndex);
-      byteBuf.writerIndex(byteBuf.writerIndex() + ENTRY_HEADER_SIZE - 12);
-      roaringBitmap.serialize(new ByteBufOutputStream(byteBuf));
-      wrtIdx = byteBuf.writerIndex();
-      updateBlockHeader(wrtIdx);
-      persist();
-    } else {
-      log.info("write entry offset: {}, size: {}", result, currentPageAvailableSize - ENTRY_HEADER_SIZE);
-      CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
-      addUsedPageSize(byteBuf.writerIndex(), currentPageAvailableSize);
-      byteBuf.writeByte(2);
-      byteBuf.writeMedium(currentPageAvailableSize - ENTRY_HEADER_SIZE);
-      // next entry offset
-      byteBuf.writeInt(getNextPageOffset(byteBuf.writerIndex()) + PAGE_HEADER_SIZE);
-      // tag index
-      byteBuf.writeInt(tagIndex);
-      byteBuf.writerIndex(byteBuf.writerIndex() + ENTRY_HEADER_SIZE - 12);
-      compositeByteBuf.addComponent(byteBuf.slice(byteBuf.writerIndex(), currentPageAvailableSize - ENTRY_HEADER_SIZE));
-      byteBuf.writerIndex(byteBuf.writerIndex() + currentPageAvailableSize - ENTRY_HEADER_SIZE);
-
-      int leaveSize = needSize - (currentPageAvailableSize - ENTRY_HEADER_SIZE);
-      while (leaveSize > 0) {
-        // next page
-        pageIndex = getPageOffset(byteBuf.writerIndex());
-        if (pageIndex == byteBuf.writerIndex()) {
-          // Page Header: page size
-          byteBuf.writeInt(0);
-          // Page Header: reserve
-          byteBuf.writerIndex(byteBuf.writerIndex() + PAGE_HEADER_SIZE - 4);
-        }
-
-        int writeSize = Math.min(leaveSize, PAGE_SIZE - PAGE_HEADER_SIZE - ENTRY_HEADER_SIZE);
-        leaveSize = leaveSize - writeSize;
-        log.info("write entry offset: {}, size: {}", byteBuf.writerIndex(), writeSize);
-
-        addUsedPageSize(byteBuf.writerIndex(), writeSize + ENTRY_HEADER_SIZE);
-        byteBuf.writeByte(2);
-        byteBuf.writeMedium(writeSize);
+      if (pageIndex == byteBuf.writerIndex()) {
+        // Page Header: page size
+        byteBuf.writeInt(0);
+        // Page Header: reserve
+        byteBuf.writerIndex(byteBuf.writerIndex() + PAGE_HEADER_SIZE - 4);
+      }
+      int result = byteBuf.writerIndex();
+      // single page
+      if (needSize + ENTRY_HEADER_SIZE <= currentPageAvailableSize) {
+        log.info("write entry offset: {}, size: {}", result, needSize);
+        // update page header
+        addUsedPageSize(result, needSize + ENTRY_HEADER_SIZE);
+        // entry header 32 bytes
+        byteBuf.writeByte(1);
+        byteBuf.writeMedium(needSize);
         // next entry offset
-        if (leaveSize > 0) {
-          byteBuf.writeInt(getNextPageOffset(byteBuf.writerIndex()) + PAGE_HEADER_SIZE);
-        } else {
-          byteBuf.writeInt(0);
-        }
+        byteBuf.writeInt(0);
         // tag index
         byteBuf.writeInt(tagIndex);
         byteBuf.writerIndex(byteBuf.writerIndex() + ENTRY_HEADER_SIZE - 12);
-        compositeByteBuf.addComponent(byteBuf.slice(byteBuf.writerIndex(), writeSize));
-        byteBuf.writerIndex(byteBuf.writerIndex() + writeSize);
-      }
+        roaringBitmap.serialize(new ByteBufOutputStream(byteBuf));
+        updateBlockHeader(byteBuf.writerIndex());
+        persist();
+      } else {
+        log.info("write entry offset: {}, size: {}", result, currentPageAvailableSize - ENTRY_HEADER_SIZE);
+        CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
+        addUsedPageSize(byteBuf.writerIndex(), currentPageAvailableSize);
+        byteBuf.writeByte(2);
+        byteBuf.writeMedium(currentPageAvailableSize - ENTRY_HEADER_SIZE);
+        // next entry offset
+        byteBuf.writeInt(getNextPageOffset(byteBuf.writerIndex()) + PAGE_HEADER_SIZE);
+        // tag index
+        byteBuf.writeInt(tagIndex);
+        byteBuf.writerIndex(byteBuf.writerIndex() + ENTRY_HEADER_SIZE - 12);
+        compositeByteBuf.addComponent(byteBuf.slice(byteBuf.writerIndex(), currentPageAvailableSize - ENTRY_HEADER_SIZE));
+        byteBuf.writerIndex(byteBuf.writerIndex() + currentPageAvailableSize - ENTRY_HEADER_SIZE);
 
-      roaringBitmap.serialize(new ByteBufOutputStream(compositeByteBuf));
-      persist();
+        int leaveSize = needSize - (currentPageAvailableSize - ENTRY_HEADER_SIZE);
+        while (leaveSize > 0) {
+          // next page
+          pageIndex = getPageOffset(byteBuf.writerIndex());
+          if (pageIndex == byteBuf.writerIndex()) {
+            // Page Header: page size
+            byteBuf.writeInt(0);
+            // Page Header: reserve
+            byteBuf.writerIndex(byteBuf.writerIndex() + PAGE_HEADER_SIZE - 4);
+          }
+
+          int writeSize = Math.min(leaveSize, PAGE_SIZE - PAGE_HEADER_SIZE - ENTRY_HEADER_SIZE);
+          leaveSize = leaveSize - writeSize;
+          log.info("write entry offset: {}, size: {}", byteBuf.writerIndex(), writeSize);
+
+          addUsedPageSize(byteBuf.writerIndex(), writeSize + ENTRY_HEADER_SIZE);
+          byteBuf.writeByte(2);
+          byteBuf.writeMedium(writeSize);
+          // next entry offset
+          if (leaveSize > 0) {
+            byteBuf.writeInt(getNextPageOffset(byteBuf.writerIndex()) + PAGE_HEADER_SIZE);
+          } else {
+            byteBuf.writeInt(0);
+          }
+          // tag index
+          byteBuf.writeInt(tagIndex);
+          byteBuf.writerIndex(byteBuf.writerIndex() + ENTRY_HEADER_SIZE - 12);
+          compositeByteBuf.addComponent(byteBuf.slice(byteBuf.writerIndex(), writeSize));
+          byteBuf.writerIndex(byteBuf.writerIndex() + writeSize);
+        }
+        roaringBitmap.serialize(new ByteBufOutputStream(compositeByteBuf));
+        updateBlockHeader(byteBuf.writerIndex());
+        persist();
+      }
+      return result;
+    } finally {
+      writeLock.unlock();
     }
-    return result;
   }
 
   public void updateRoaringBitmap(int offset, RoaringBitmap roaringBitmap) {
@@ -212,48 +219,45 @@ public class BlockChannel {
     if (entryOffset <= 0) {
       return null;
     }
-    byteBuf.markReaderIndex();
-    byteBuf.readerIndex(entryOffset);
-    int flag = byteBuf.readUnsignedByte();
-    int size = byteBuf.readUnsignedMedium();
-    int nextEntryOffset = byteBuf.readInt();
-    byteBuf.skipBytes(24);
+    try {
+      readLock.lock();
+      int flag = byteBuf.getUnsignedByte(entryOffset);
+      int size = byteBuf.getUnsignedMedium(entryOffset + 1);
+      int nextEntryOffset = byteBuf.getInt(entryOffset + 4);
 
-    if (size <= 0 || flag < 1) {
-      return null; // Entry is deleted
-    }
-    byteBuf.resetReaderIndex();
-    ByteBuf sliceByteBuf = byteBuf.slice(entryOffset + ENTRY_HEADER_SIZE, size);
-
-    RoaringBitmap bitmap = new RoaringBitmap();
-
-    if (flag == 1) {
-      // Single page entry
-      log.info("read entry offset: {}, size: {}", entryOffset, size);
-      bitmap.deserialize(new ByteBufInputStream(sliceByteBuf));
-    } else if (flag == 2) {
-      log.info("read entry offset: {}, size: {}", entryOffset, size);
-      CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
-      compositeByteBuf.addComponent(sliceByteBuf);
-      while (flag == 2 && nextEntryOffset != 0) {
-        byteBuf.markReaderIndex();
-        byteBuf.readerIndex(nextEntryOffset);
-        flag = byteBuf.readUnsignedByte();
-        size = byteBuf.readUnsignedMedium();
-        log.info("read entry offset: {}, size: {}", nextEntryOffset, size);
-        compositeByteBuf.addComponent(byteBuf.slice(nextEntryOffset + ENTRY_HEADER_SIZE, size));
-        nextEntryOffset = byteBuf.readInt();
-        byteBuf.skipBytes(24);
-        byteBuf.resetReaderIndex();
+      if (size <= 0 || flag < 1) {
+        return null; // Entry is deleted
       }
-      compositeByteBuf.writerIndex(compositeByteBuf.capacity());
-      bitmap.deserialize(new ByteBufInputStream(compositeByteBuf));
+      ByteBuf sliceByteBuf = byteBuf.slice(entryOffset + ENTRY_HEADER_SIZE, size);
+
+      RoaringBitmap bitmap = new RoaringBitmap();
+
+      if (flag == 1) {
+        // Single page entry
+        log.info("read entry offset: {}, size: {}", entryOffset, size);
+        bitmap.deserialize(new ByteBufInputStream(sliceByteBuf));
+      } else if (flag == 2) {
+        log.info("read entry offset: {}, size: {}", entryOffset, size);
+        CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
+        compositeByteBuf.addComponent(sliceByteBuf);
+        while (flag == 2 && nextEntryOffset != 0) {
+          flag = byteBuf.getUnsignedByte(nextEntryOffset);
+          size = byteBuf.getUnsignedMedium(nextEntryOffset + 1);
+          log.info("read entry offset: {}, size: {}", nextEntryOffset, size);
+          compositeByteBuf.addComponent(byteBuf.slice(nextEntryOffset + ENTRY_HEADER_SIZE, size));
+          nextEntryOffset = byteBuf.getInt(nextEntryOffset + 4);
+        }
+        compositeByteBuf.writerIndex(compositeByteBuf.capacity());
+        bitmap.deserialize(new ByteBufInputStream(compositeByteBuf));
+      }
+      return bitmap;
+    } finally {
+      readLock.unlock();
     }
-    return bitmap;
   }
 
   protected long getAvailableFileSize() throws Exception {
-    return fileChannel.size() - wrtIdx;
+    return fileChannel.size() - byteBuf.writerIndex();
   }
 
   protected int getPageOffset(int offset) {
@@ -289,8 +293,17 @@ public class BlockChannel {
         break;
       }
       counter++;
-      idx = idx + 8 + size;
+      idx = idx + ENTRY_HEADER_SIZE + size;
     }
     return counter;
+  }
+
+  protected void prettyDebug() throws IOException {
+    int idx = BLOCK_HEADER_SIZE;
+    log.info("wrtIdx: {}", byteBuf.getInt(4));
+    while (idx < getFileSize()) {
+      log.info("Page idx: {}, page available size: {}, entry num: {}", (idx - BLOCK_HEADER_SIZE) / PAGE_SIZE, PAGE_SIZE - PAGE_HEADER_SIZE - byteBuf.getInt(idx), getPageEntryNumber(idx));
+      idx += PAGE_SIZE;
+    }
   }
 }
