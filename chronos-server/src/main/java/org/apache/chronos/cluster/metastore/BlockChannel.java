@@ -211,8 +211,8 @@ public class BlockChannel {
   }
 
   public void deleteRoaringBitmap(int offset) {
-
-    // todo
+    // 1. update page header
+    // 2. align page content
   }
 
   public RoaringBitmap getRoaringBitmap(int entryOffset) throws IOException {
@@ -300,8 +300,9 @@ public class BlockChannel {
 
   protected void prettyDebug() throws IOException {
     int idx = BLOCK_HEADER_SIZE;
+    int endIdx = byteBuf.writerIndex();
     log.info("wrtIdx: {}", byteBuf.getInt(4));
-    while (idx < getFileSize()) {
+    while (idx < endIdx) {
       log.info("Page idx: {}, page available size: {}, entry num: {}", (idx - BLOCK_HEADER_SIZE) / PAGE_SIZE, PAGE_SIZE - PAGE_HEADER_SIZE - byteBuf.getInt(idx), getPageEntryNumber(idx));
       idx += PAGE_SIZE;
     }

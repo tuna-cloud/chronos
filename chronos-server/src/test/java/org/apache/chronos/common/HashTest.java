@@ -8,28 +8,26 @@ import org.apache.commons.codec.digest.XXHash32;
 public class HashTest {
 
   public static void main(String[] args) {
-    XXHash32 xxHash = new XXHash32(0);
-
     int max = 400_0000;
     int valueMax = 100_0000;
     Map<Integer, Integer> map = Maps.newHashMapWithExpectedSize(max);
+    Map<Integer, String> map1 = Maps.newHashMapWithExpectedSize(max);
     for (int i = 0; i < valueMax; i++) {
       String msg = "test_" + i;
       XXHash32 xxHash32 = new XXHash32(0);
       xxHash32.update(msg.getBytes(), 0, msg.getBytes().length);
       long value = xxHash32.getValue();
-      xxHash.reset();
-      xxHash.update(msg.getBytes(), 0, msg.getBytes().length);
-      long val = xxHash.getValue();
       if (value > 0xFFFFFFFFL) {
         System.out.println("123123");
       }
       int idx = (int) (value % max);
       if (map.containsKey(idx)) {
+        System.out.println(map1.get(idx) + ":" + msg);
         map.put(idx, map.get(idx) + 1);
       } else {
         map.put(idx, 1);
       }
+      map1.put(idx, msg);
     }
     int count1 = 0;
     int count2 = 0;
