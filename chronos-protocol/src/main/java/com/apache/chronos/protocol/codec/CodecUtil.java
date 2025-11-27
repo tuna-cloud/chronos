@@ -42,7 +42,7 @@ public final class CodecUtil {
     if (length == 0) {
       return null;
     }
-    return buf.getCharSequence(pos, length, StandardCharsets.UTF_8).toString();
+    return buf.getCharSequence(pos + getVarIntLength(length), length, StandardCharsets.UTF_8).toString();
   }
 
   public static void writeString(ByteBuf buf, String value) {
@@ -61,7 +61,7 @@ public final class CodecUtil {
     } else {
       byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
       setVarInt(buf, pos, valueBytes.length);
-      buf.setBytes(pos, valueBytes);
+      buf.setBytes(pos + getVarIntLength(valueBytes.length), valueBytes);
     }
   }
 
@@ -100,6 +100,20 @@ public final class CodecUtil {
       buf.setByte(pos + 1,(value >>> 16) & 0xFF);
       buf.setByte(pos + 2,(value >>> 8) & 0xFF);
       buf.setByte(pos + 3,value & 0xFF);
+    } else {
+      throw new RuntimeException("value is too big: " + value);
+    }
+  }
+
+  public static int getVarIntLength(int value) {
+    if (value < 64) {
+      return 1;
+    } else if (value < 16384) {
+      return 2;
+    } else if (value < 4194304) {
+      return 3;
+    } else if (value < 1073741824) {
+      return 4;
     } else {
       throw new RuntimeException("value is too big: " + value);
     }
